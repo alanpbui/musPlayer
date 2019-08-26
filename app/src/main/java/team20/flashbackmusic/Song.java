@@ -99,8 +99,6 @@ public class Song{
     }
 
 
-
-
     public void setScore(int s) { score = s; }
 
     public void setStatus(int s) { status = s; }

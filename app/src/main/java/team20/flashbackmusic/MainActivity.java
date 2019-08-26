@@ -1,9 +1,9 @@
 package team20.flashbackmusic;
 
-
+import android.content.DialogInterface;
+import android.app.AlertDialog;
 import android.Manifest;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Criteria;
@@ -13,22 +13,17 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.util.Base64;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.GridView;
@@ -37,18 +32,7 @@ import android.widget.ListView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
-import java.lang.reflect.Field;
-import java.lang.reflect.Type;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -62,54 +46,49 @@ import java.util.TimerTask;
 
 
 public class MainActivity extends AppCompatActivity implements LocationListener {
-    private final int SONG_TITLE = MediaMetadataRetriever.METADATA_KEY_TITLE;
-    private final int SONG_ARTIST = MediaMetadataRetriever.METADATA_KEY_ARTIST;
-    private final int SONG_ALBUM = MediaMetadataRetriever.METADATA_KEY_ALBUM;
-    private final int SONG_DURATION = MediaMetadataRetriever.METADATA_KEY_DURATION;
 
     //initialize current index playing song
-    private int  currentindex = 0;
-
+    private int currentIndex = 0;
 
     // List of songs
     private ListView listView;
-    private ListAdapter listAdapter;
 
-
+    // Mechanism that plays songs
     private MediaPlayer mediaPlayer;
+    private MusicPlayer player;
 
-
-    private FloatingActionButton  playButton;
+    // Buttons that the user can interact with
+    private FloatingActionButton  playButton, nextSong, previousSong,
+                showCurrentPlaylist;
     private Switch flashback;
-    private FloatingActionButton nextSong;
-    private FloatingActionButton previousSong;
-    private Button addBtn;
+    private Button sortButton;
 
+    // Song's status kept through a numerical value
+    private IScore score;
 
-    private Score score;
+    // Acquires the music within the phone's memory
+    private LocalMusicParser musicParser;
+    private MediaMetadataRetriever mmr = new MediaMetadataRetriever();
 
-    //playlist of the song to be played
-    private PlayList_flashback playList_flashback;
-
+    // Playlist of the flashback mode
+    private PlaylistFBM playlist_FB;
 
     // List of albums view
     private GridView albumView;
     private ListAdapter albumAdapter;
+
+    // Indicator of whether flashback mode is on/off
     private boolean flashOn = false;
-
-
-    private MediaMetadataRetriever mmr = new MediaMetadataRetriever();
 
     //TextViews of this activity
     private TextView nowPlayingView, locationView, dateTimeView; //durationView;
-
 
     //list of songs according to purpose
     private List<String> songList; //to play music
     private List<String> songTitleList; //for display
     private List<Song> songListObj; //for storage of songs
 
-    //data for playlist of song
+    //data for playlist_FB of song
     private ArrayList<String> sortingList;
     private Hashtable<String, Integer> indexTosong;
 
@@ -117,123 +96,20 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private Hashtable<String, Album> albumList; //for checking if album exist
     private ArrayList<Album> tempListAlbum;
 
-
+    // Album variables
     private boolean playingAlbumFlag = false;
     private Album albumToPlay;
 
+    // Location variables and variables that overall contribute to song's score
     private LocationManager locationManager;
     private int currentUserMNEIndex = -1;
     private int currentUserDayOfWeek = -1;
     private Location currentUserlocation;
 
-    /**
-     * Class for adapting list view to put +,x, and checklist signs
-     */
-    class MyAdapter extends BaseAdapter implements ListAdapter {
-        private ArrayList<String> list = new ArrayList<String>();
-        private Context context;
-        //        private Button addBtn;
-        int buttonimage = 1;
+    // Adapt view of list by adding status of songs in picture format
+    private MyAdapter adapter;
 
-        /**
-         * Constructor of the adapter of list view
-         * @param list
-         * @param context
-         */
-        public MyAdapter(ArrayList<String> list, Context context) {
-            this.list = list;
-            this.context = context;
-
-        }
-
-        @Override
-        public int getCount() {
-            return list.size();
-        }
-
-        @Override
-        public Object getItem(int pos) {
-            return list.get(pos);
-        }
-
-        //@Override
-        public long getItemId(int pos) {
-            //return list.get(pos).getiD();
-            //just return 0 if your list items do not have an Id variable.
-            return 0;
-        }
-
-        @Override
-        public View getView(final int position, final View convertView, ViewGroup parent) {
-            View v = convertView;
-            if (v == null) {
-                LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-                v = inflater.inflate(R.layout.listview, null);
-            }
-            //Handle TextView and display string from your list
-            final TextView listItemText = (TextView) v.findViewById(R.id.list_item_string);
-            final Button addBtn = (Button) v.findViewById(R.id.add_btn);
-            listItemText.setText(list.get(position));
-       /*     if(songListObj!=null) {
-                if (songListObj.get(position).getStatus() == 0) {
-                    addBtn.setBackgroundResource(R.drawable.add);
-                } else if (songListObj.get(position).getStatus() == 1) {
-                    addBtn.setBackgroundResource(R.drawable.check);
-                } else
-                    addBtn.setBackgroundResource(R.drawable.cross);
-            }
-*/
-
-            addBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-
-                    //do something
-                    if (songListObj.get(position).getStatus() == 0) {
-
-
-                        //change status of song to favorite
-                        addBtn.setBackgroundResource(R.drawable.check);
-                        playList_flashback.changeToFavorite(position);
-
-                        Toast.makeText(MainActivity.this, "Added" +
-                                " to favorite", Toast.LENGTH_SHORT).show();
-
-                    } else if (songListObj.get(position).getStatus() == 1) {
-
-                        //change status of song to dislike
-                        playList_flashback.changeToDislike(position);
-
-                        addBtn.setBackgroundResource(R.drawable.cross);
-
-                        Toast.makeText(MainActivity.this, "Added" +
-                                " to dislike", Toast.LENGTH_SHORT).show();
-
-                        if (flashOn && playList_flashback.sortingList.get(currentindex).equals(songList.get(position)))
-                            next(playList_flashback.sortingList);
-                        else if (!flashOn && currentindex == position && mediaPlayer.isPlaying())
-                            next(songList);
-                    } else {
-                        Toast.makeText(MainActivity.this, "Back" +
-                                " to netral", Toast.LENGTH_SHORT).show();
-                        songListObj.get(position).setStatus(0);
-                        Location location = currentUserlocation;
-                        int day = currentUserDayOfWeek;
-                        int time = currentUserMNEIndex;
-
-                        //change status of song to neutral
-                        playList_flashback.changeToNeutral(position,location,day, time);
-                        addBtn.setBackgroundResource(R.drawable.add);
-                    }
-                }
-            });
-
-            return v;
-        }
-    }
-
-
-
+    private MusicLocator musicLocator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -242,9 +118,14 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        createButton();
+
         //setup media player
         mediaPlayer = new MediaPlayer();
 
+        // Set up mechanism to actually play the songs
+        player = new MusicPlayer(mediaPlayer, this, musicLocator, albumToPlay,
+                playButton);
 
 
         //set up location manager, ask user for permission
@@ -272,392 +153,35 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         //initialize location of user
         currentUserlocation = getCurrentLocation();
 
+        initializeView();
 
-        //set up flashback switch listener
-        flashback = (Switch) findViewById(R.id.switch1);
-        flashback.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isChecked == true) {
-                    //update flags
-                    flashOn = true;
-                    playingAlbumFlag = false;
+        detectTimeChanges();
 
-                    nextSong.setClickable(false);
-                    previousSong.setClickable(false);
-                    listView.setEnabled(false);
-                    playButton.setClickable(false);
-                    changeToPauseButton();
+        intializeDataStruc();
 
-                    Location location = currentUserlocation;
-                    int time = currentUserMNEIndex;
-
-                    Log.d("(flashback) time",Integer.toString(time));
-                    Log.d("flashback: ", "toggled flashback mode on");
-
-                    int day = currentUserDayOfWeek;
-
-                    //get score to list out song to be played
-                    score.score(location, day, time);
-                    playList_flashback.sorter();
-                    sortingList = playList_flashback.sortingList;
-
-                    //play the song according to the score order
-                    playTracksOrder();
-
-                    Toast.makeText(MainActivity.this, "Flashback mode on", Toast.LENGTH_SHORT).show();
-                }
-                else{
-                    flashOn = false;
-
-                    nextSong.setClickable(true);
-                    previousSong.setClickable(true);
-                    playButton.setClickable(true);
-                    listView.setEnabled(true);
-
-                    mediaPlayer.stop();
-                    changeToPlayButton();
-
-                    Toast.makeText(MainActivity.this, "Flashback mode off", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-
-
-        //Play or Pause, Previous, Next button
-        playButton = (FloatingActionButton) findViewById(R.id.playButton);
-        nextSong = findViewById(R.id.next);
-        previousSong = findViewById(R.id.previous);
-        changeToPlayButton();
-
-        //initialize the views
-        nowPlayingView = (TextView) findViewById(R.id.nowPlaying);
-        albumView = (GridView) findViewById(R.id.albumList);
-        dateTimeView = (TextView)findViewById(R.id.playingTime);
-        locationView = (TextView) findViewById(R.id.playingLoc);
-
-        // Make list
-        listView = (ListView) findViewById(R.id.songList);
-
-        songList = new ArrayList<>();
-        songTitleList = new ArrayList<>();
-        songListObj = new ArrayList<>();
-        albumList = new Hashtable<>();
-        indexTosong = new Hashtable<>();
 
         //GET LIST OF SONGS FROM RAW DIRECTORY
-        getMusic(songList, songTitleList);
+        musicParser = new LocalMusicParser(this, mmr, songListObj);
+        musicParser.getMusic(songList,songTitleList);
+        musicParser.populateAlbum(songListObj, albumList);
+
 
         //initialize flashback mode data
         sortingList = new ArrayList<>(songList);
+
+        // Initializes data structure to hold the song's location
         for(int i=0;i<songList.size();i++){
             indexTosong.put(songList.get(i),i);
         }
-        score = new Score(songList,songListObj);
-        playList_flashback = new PlayList_flashback(sortingList, (ArrayList<Song>) songListObj, indexTosong);
 
+        score = new ScoreFlashback(songList, songListObj);
 
-        /*RESTORING PREVIOUS STATE*/
+        //playList_flashback = new PlayList_flashback(sortingList, (ArrayList<Song>) songListObj, indexTosong);
+        playlist_FB = new PlaylistFlashback(sortingList, (ArrayList<Song>) songListObj, indexTosong);
 
-        //NOTE: BEFORE RESTORING STATE, ADD SONGS IN THE DIRECTORY FIRST
-        SharedPreferences sp = getSharedPreferences("lastState", MODE_PRIVATE);
-     //   flashOn = sp.getBoolean("flashbackFlag", false);
-       // currentindex = sp.getInt("lastPlayedIndex", -1);
-   /*     if(getSongListObj()!=null)
-            songListObj = getSongListObj();
-        if(currentindex != -1) {   //stored before
-            //TODO: need to store Date and Location of each song
-            //TODO: need to store data on list views
-            if (flashOn) {
-                flashback.setChecked(true);
-                playingAlbumFlag = false;
-                nextSong.setClickable(false);
-                previousSong.setClickable(false);
-                listView.setEnabled(false);
-                changeToPauseButton();
+        // Sets up all the responses to user interaction
+        setListeners();
 
-                Location location = currentUserlocation;
-                int time = currentUserMNEIndex;
-
-                Log.d("ti", Integer.toString(time));
-
-                int day = currentUserDayOfWeek;
-
-                score.score(location, day, time);
-                playList_flashback.sorter();
-
-                sortingList = playList_flashback.sortingList;
-                playTracksOrder();
-            } else {
-                setNowPlayingView(songTitleList.get(currentindex));
-                showDateAndTime(songListObj.get(currentindex));
-                showCurrentLocation(songListObj.get(currentindex));
-            }
-        }
-
-*/
-        //TODO: need to show in list views all the data stored
-
-        /*RESTORING PREVIOUS STATE*/
-
-
-        //populate album after we get music
-        populateAlbum(songListObj, albumList);
-        MyAdapter adapter = new MyAdapter((ArrayList<String>) songTitleList, this);
-
-        //handle listview and assign adapter
-        listView = (ListView)findViewById(R.id.songList);
-        listView.setAdapter(adapter);
-
-
-        //set up listener for list of tracks list view
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-
-                Log.d("listView: ", "a song is clicked");
-
-                // Disable album queue
-                playingAlbumFlag = false;
-                currentindex = i;
-
-                if (!flashOn) {
-                    Log.d("listView: ", "playing a song pressed by user");
-                    if (mediaPlayer != null) {
-                        mediaPlayer.release();
-                        mediaPlayer = null;
-                    }
-
-
-
-                    int resID = getResources().getIdentifier(songList.get(i), "raw", getPackageName());
-                    mediaPlayer = MediaPlayer.create(MainActivity.this, resID);
-                    mediaPlayer.start();
-
-                    //after music start, change the button into pause button
-                    changeToPauseButton();
-
-                    //set the current playing song in the text view
-                    setNowPlayingView(songTitleList.get(i));
-                    showCurrentLocation(songListObj.get(i));
-                    showDateAndTime(songListObj.get(i));
-                    storeDateAndTime(songListObj.get(i));
-
-                    try {
-                        storeLocation(songListObj.get(i));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-
-
-                } else {
-
-                    Log.d("listView: ", "user pressed a track in flashback mode");
-                    //TODO: add pop up message where the user need to press ok
-                    Toast.makeText(MainActivity.this, "You are in flashback mode!\n" +
-                            "Please go to normal mode to select music", Toast.LENGTH_SHORT).show();
-                }
-
-
-            }
-        });
-
-
-        //set listener for next song button
-        nextSong.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (flashOn == false) {
-                    if(currentindex == songList.size()-1){
-                        currentindex = songList.size()-1;
-                        Toast lastSong = Toast.makeText(getApplicationContext(),
-                                "No next song available", Toast.LENGTH_SHORT);
-
-                        lastSong.show();
-                        return;
-                    }
-                    next(songList);
-                }
-            }
-        });
-
-
-        //set listener for previous song button
-        previousSong.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (flashOn == false) {
-
-                    if(playingAlbumFlag)
-                    {
-                        Toast.makeText(getApplicationContext(),
-                                "No previous song available." +
-                                        " You are playing an album", Toast.LENGTH_LONG).show();
-                    }
-                    else
-                    {
-                        if(currentindex == 0){
-                            Toast firstSong = Toast.makeText(getApplicationContext(),
-                                    "No previous song available", Toast.LENGTH_LONG);
-                            firstSong.show();
-                            return;
-                        }
-                        previous(songList);
-                    }
-                }
-            }
-        });
-
-        //show list of albums
-        tempListAlbum = new ArrayList<>(albumList.values());
-        albumAdapter = new ArrayAdapter<>(this, android.R.layout.simple_expandable_list_item_1, tempListAlbum);
-        albumView.setAdapter(albumAdapter);
-
-
-        //set on item click listener for album list
-        albumView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                Log.d("album:", "album is clicked!");
-                // Enable album queue
-                playingAlbumFlag = true;
-
-                if (!flashOn) {
-                    Log.d("album:", "playing the whole album");
-
-                    if (mediaPlayer != null) {
-                        mediaPlayer.release();
-                        mediaPlayer = null;
-                    }
-
-                    //get album to play
-                    albumToPlay = tempListAlbum.get(i);
-
-                    //prepare album to be played
-                    setupAlbum();
-
-                    //play the whole album
-                    playAlbum();
-
-
-                } else {
-                    Log.d("album:", "user pressed album in flashback mode");
-
-                    Toast.makeText(MainActivity.this, "You are in flashback mode!\n" +
-                            "Please go to normal mode to select music", Toast.LENGTH_SHORT).show();
-                }
-            }
-
-        });
-
-
-        //set listener for the play button
-        playButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                //Replace with play the current music played
-                //or just change to pause button if there is no music
-                //selected
-                if (mediaPlayer != null) {
-                    if (mediaPlayer.isPlaying()) {
-                        mediaPlayer.pause();
-                        changeToPlayButton();
-
-                    } else {
-                        mediaPlayer.start();
-                        nowPlayingView.setSelected(true);
-                        changeToPauseButton();
-
-                    }
-                } else {
-                    //when there is no music is selected, change play and pause accordingly
-                    if (playButton.getTag().equals(R.drawable.ic_play_arrow_black_24dp))
-                    {
-                        changeToPauseButton();
-                    }
-                    else
-                    {
-                        changeToPlayButton();
-                    }
-                }
-
-            }
-        });
-
-    }
-
-
-    /** This parse all the music from raw directory
-     *  and store the songs in all the list inputs
-     *
-     *  @param songList the list of original file name of song
-     *  @param songTitleList the list of title-artist of song to be displayed
-     */
-    public void getMusic(List songList, List songTitleList) {
-        Field[] fields = R.raw.class.getFields();
-
-        for (int i = 0; i < fields.length; i++) {
-            String songFilename = fields[i].getName();
-
-            songList.add(songFilename);
-
-
-            int resId = getResources().getIdentifier(songFilename, "raw", getPackageName());
-            Uri mediaPath = Uri.parse("android.resource://" + getPackageName() +
-                    "/" + resId);
-            mmr.setDataSource(this, mediaPath);
-
-
-            //add list of song objects
-            String title = mmr.extractMetadata(SONG_TITLE);
-            String artist = mmr.extractMetadata(SONG_ARTIST);
-            String album = mmr.extractMetadata(SONG_ALBUM);
-            String duration = mmr.extractMetadata(SONG_DURATION);
-
-            if(artist == null)
-                artist = "Unknown Artist";
-            if(album == null)
-                album = "Unknown Album";
-
-            long durationToLong = Long.parseLong(duration);
-
-            Song s = new Song(title, artist, album, durationToLong, resId);
-            songListObj.add(s);
-
-            //add to list for display TODO: we can get data from song object instead
-            String display = title + " - " + artist;
-            songTitleList.add(display);
-
-        }
-
-
-    }
-
-
-    /** This populate the album list of MainActivity
-     *  PRECONDITION: tracks is already populated
-     */
-    public void populateAlbum(List<Song> songListObj, Hashtable<String, Album> albumList) {
-
-
-        for (int i = 0; i < songListObj.size(); i++) {
-            String albumName = songListObj.get(i).getAlbum();
-            Log.d("Populating album:", albumName);
-            if (!albumList.containsKey(albumName)) {
-                //create album
-                Album newAlbum = new Album(albumName);
-                //add current track
-                newAlbum.addTrack(songListObj.get(i));
-                albumList.put(albumName, newAlbum);
-                Log.d("new album:", newAlbum.toString() + " with song "
-                        + songListObj.get(i).getTitle());
-
-            } else {
-                albumList.get(albumName).addTrack(songListObj.get(i));
-                Log.d("existing albumPopulate:", albumName + " with song " +
-                        songListObj.get(i).getTitle());
-            }
-        }
     }
 
     /** This makes the back button into home button
@@ -700,68 +224,32 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         return super.onOptionsItemSelected(item);
     }
 
-    /** This play the current all the current album songs
-     *  PRECONDITION: album has at least 1 song
-     */
-    public void playAlbum()
+
+    // Creates UI button
+    private void createButton() {
+        playButton = findViewById(R.id.playButton);
+        nextSong = findViewById(R.id.next);
+        previousSong = findViewById(R.id.previous);
+        showCurrentPlaylist = findViewById(R.id.currentPlaylist);
+    }
+
+    // Creates the display of the songs
+    private void initializeView() {
+        nowPlayingView = findViewById(R.id.nowPlaying);
+        albumView = findViewById(R.id.albumList);
+        dateTimeView = findViewById(R.id.playingTime);
+        locationView = findViewById(R.id.playingLoc);
+        //displayRabbit = findViewById(R.id.displayRabbit);
+    }
+
+    // Sets up data structures used to contain songs
+    public void intializeDataStruc()
     {
-        if (mediaPlayer != null) {
-            mediaPlayer.release();
-            mediaPlayer = null;
-        }
-
-
-        Song songToPlay = albumToPlay.getNextSongToPlay();
-        int resID = songToPlay.getSongResId();
-
-        mediaPlayer = MediaPlayer.create(MainActivity.this, resID);
-        mediaPlayer.start();
-
-        Log.d("album play", "playing next song in the album");
-
-        //set button tag to pause
-        changeToPauseButton();
-
-        //set the current playing song view, location, date and time
-        String currentPlayingSongDisplay = songToPlay.getTitle() + " - " + songToPlay.getArtist();
-        setNowPlayingView(currentPlayingSongDisplay);
-        showCurrentLocation(songToPlay);
-        showDateAndTime(songToPlay);
-
-        //update the history of playing date and time of song
-        storeDateAndTime(songToPlay);
-        try {
-            storeLocation(songToPlay);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        //set media player listener
-        mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-            @Override
-            public void onCompletion(MediaPlayer mp) {
-                Log.d("onCompletionCalled", "yes!");
-                if (playingAlbumFlag) {
-
-                    //check if there is any song to play left in album
-                    if (!albumToPlay.isQueueEmpty()) {
-                        playAlbum();
-                    }
-                    //if there is no more album to play, go to waiting state
-                    else
-                    {
-                        playingAlbumFlag = false;
-                        //set button tag to play
-                        changeToPlayButton();
-                    }
-
-                } else {
-                    //set button tag to play
-                    changeToPlayButton();
-                }
-            }
-        });
-
+        songList = new ArrayList<>();
+        songTitleList = new ArrayList<>();
+        songListObj = new ArrayList<>();
+        albumList = new Hashtable<>();
+        indexTosong = new Hashtable<>();
     }
 
 
@@ -769,32 +257,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
      *  app is closed
      */
     @Override
-    public void onStop()
-    {
-        super.onStop();
-
-        //save the last state using sharedPreference
-    /*    SharedPreferences sp = getSharedPreferences("lastState", MODE_PRIVATE);
-        SharedPreferences.Editor editor = sp.edit();
-        editor.putBoolean("flashbackFlag", flashOn);
-        editor.putInt("lastPlayedIndex", currentindex);
-        editor.apply();
-        storeSongs();
-        //TODO: put more data such as resId, durationLastPlayed
-        */
-
-    }
-
-    /** This will prepare the album to be played by
-     *  queueing all song
-     */
-    public void setupAlbum()
-    {
-        albumToPlay.clearQueue();
-        //queue all songs to play in album
-        albumToPlay.queueAllSong();
-    }
-
+    public void onStop() { super.onStop(); }
 
     /** This will set the text view to show the current playing song
      *  @param nowPlayingString the current playing song title - artist
@@ -807,23 +270,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         nowPlayingView.setSelected(true);
     }
 
-    /** This changes the pause button into play button
-     *
-     */
-    public void changeToPlayButton() {
-        playButton.setImageResource(R.drawable.ic_play_arrow_black_24dp);
-        playButton.setTag(R.drawable.ic_play_arrow_black_24dp);
-    }
-
-    /** This changes the play button into pause button
-     *
-     */
-    public void changeToPauseButton() {
-        playButton.setImageResource(R.drawable.ic_pause_black_24dp);
-        playButton.setTag(R.drawable.ic_pause_black_24dp);
-    }
-
-
     /**
      * This method is a listener when the location change
      * it will play new song in flashback mode
@@ -834,51 +280,46 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             if(currentUserlocation.distanceTo(location)>305) {
                 currentUserlocation = location;
                 score.score(location, currentUserDayOfWeek, currentUserMNEIndex);
-                playList_flashback.sorter();
+                //playList_flashback.sorter();
+                playlist_FB.sorter();
                 playTracksOrder();
             }
         }
     }
-
 
     /**
      * This method play the music in order for flashback mode
      */
     public void playTracksOrder(){
 
-        if(mediaPlayer!=null&&mediaPlayer.isPlaying()) {
-            mediaPlayer.stop();
-            mediaPlayer.release();
-        }
-        currentindex = 0;
+        player.stop();
 
-        //set the now playing text view, location, and time
-        Song curPlaying = songListObj.get(indexTosong.get(playList_flashback.sortingList.get(currentindex)));
+        currentIndex = 0;
+
+        Song curPlaying = songListObj.get(indexTosong.get(playlist_FB.getSortingList().get(currentIndex)));
         String display = curPlaying.getTitle() + " - " + curPlaying.getArtist();
 
         setNowPlayingView(display);
         showCurrentLocation(curPlaying);
         showDateAndTime(curPlaying);
 
+        int resID = getResources().getIdentifier(playlist_FB.getSortingList().get(currentIndex), "raw", getPackageName());
+        player.playMusicId(resID);
 
-        int resID = getResources().getIdentifier(playList_flashback.sortingList.get(currentindex), "raw", getPackageName());
-        mediaPlayer = MediaPlayer.create(MainActivity.this, resID);
-        mediaPlayer.start();
-        changeToPauseButton();
+        player.changeToPauseButton();
 
-        mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+        player.getMediaPlayer().setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mediaPlayer) {
-                next(playList_flashback.sortingList);
+                next(playlist_FB.getSortingList());
             }
         });
 
     }
 
-
     /**
      * Method to play the next song
-     * @param playlist the list of songs in the playlist
+     * @param playlist the list of songs in the playlist_FB
      */
     public void next(final List<String> playlist){
         if(playingAlbumFlag)
@@ -888,34 +329,35 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
         else
         {
-            currentindex++;
-            if (currentindex < playlist.size())
+            currentIndex++;
+            if (currentIndex < playlist.size())
             {
 
 
                 if (songListObj.get(indexTosong.
-                        get(playlist.get(currentindex))).getStatus() != -1) {
+                        get(playlist.get(currentIndex))).getStatus() != -1) {
 
-                    if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                        mediaPlayer.stop();
-                        mediaPlayer.release();
+                    if(player.getMediaPlayer().isPlaying()){
+                        player.getMediaPlayer().stop();
+                        player.releaseMusicPlayer();
                     }
 
 
                     //set the now playing text view
                     if(!flashOn) {
-                        setNowPlayingView(songTitleList.get(currentindex));
-                        showCurrentLocation(songListObj.get(currentindex));
-                        showDateAndTime(songListObj.get(currentindex));
-                        storeDateAndTime(songListObj.get(currentindex));
+                        setNowPlayingView(songTitleList.get(currentIndex));
+                        showCurrentLocation(songListObj.get(currentIndex));
+                        showDateAndTime(songListObj.get(currentIndex));
+                        storeDateAndTime(songListObj.get(currentIndex));
                         try {
-                            storeLocation(songListObj.get(currentindex));
+                            storeLocation(songListObj.get(currentIndex));
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
                     }
                     else{
-                        Song curPlaying = songListObj.get(indexTosong.get(playList_flashback.sortingList.get(currentindex)));
+                        Song curPlaying = songListObj.get(indexTosong.get(playlist_FB.getSortingList().get(currentIndex)));
+
                         String display = curPlaying.getTitle() + " - " + curPlaying.getArtist();
 
                         setNowPlayingView(display);
@@ -925,21 +367,18 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     }
 
 
-                    int resID = getResources().getIdentifier(playlist.get(currentindex),
+                    int resID = getResources().getIdentifier(playlist.get(currentIndex),
                             "raw", getPackageName());
-                    mediaPlayer = MediaPlayer.create(MainActivity.this, resID);
-                    mediaPlayer.start();
+                    player.playMusicId(resID);
 
-                    changeToPauseButton();
+                    player.changeToPauseButton();
 
-                    mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                    player.getMediaPlayer().setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                         @Override
                         public void onCompletion(MediaPlayer mediaPlayer) {
                             next(playlist);
                         }
                     });
-
-
                 }
 
                 else
@@ -950,15 +389,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
             else
             {
-                currentindex = playlist.size() - 1;
+                currentIndex = playlist.size() - 1;
                 if (flashOn)
                 {
-                    currentindex = 0;
+                    currentIndex = 0;
                     next(playlist);
                 }
                 else
                 {
-                    currentindex = playlist.size()-1;
+                    currentIndex = playlist.size()-1;
                     Toast.makeText(MainActivity.this, "No next song available"
                             , Toast.LENGTH_SHORT).show();
                 }
@@ -970,7 +409,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     /**
      * Method to play the previous song
-     * @param playlist the list of songs in the playlist
+     * @param playlist the list of songs in the playlist_FB
      */
     public void previous(final List<String> playlist) {
         if(playingAlbumFlag)
@@ -980,37 +419,33 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
         else
         {
-            currentindex--;
-            if (currentindex >= 0)
+            currentIndex--;
+            if (currentIndex >= 0)
             {
 
                 if(songListObj.get(indexTosong.
-                        get(playlist.get(currentindex))).getStatus() != -1)
+                        get(playlist.get(currentIndex))).getStatus() != -1)
                 {
-                    if(mediaPlayer!=null&&mediaPlayer.isPlaying()) {
-                        mediaPlayer.stop();
-                        mediaPlayer.release();
-                    }
+                    player.stop();
 
                     //update title, location, time view
-                    setNowPlayingView(songTitleList.get(currentindex));
-                    showCurrentLocation(songListObj.get(currentindex));
-                    showDateAndTime(songListObj.get(currentindex));
-                    storeDateAndTime(songListObj.get(currentindex));
+                    setNowPlayingView(songTitleList.get(currentIndex));
+                    showCurrentLocation(songListObj.get(currentIndex));
+                    showDateAndTime(songListObj.get(currentIndex));
+                    storeDateAndTime(songListObj.get(currentIndex));
                     try {
-                        storeLocation(songListObj.get(currentindex));
+                        storeLocation(songListObj.get(currentIndex));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
 
 
-                    int resID = getResources().getIdentifier(playlist.get(currentindex), "raw", getPackageName());
-                    mediaPlayer = MediaPlayer.create(MainActivity.this, resID);
-                    mediaPlayer.start();
+                    int resID = getResources().getIdentifier(playlist.get(currentIndex), "raw", getPackageName());
+                    player.playMusicId(resID);
 
-                    changeToPauseButton();
+                    player.changeToPauseButton();
 
-                    mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                    player.getMediaPlayer().setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                         @Override
                         public void onCompletion(MediaPlayer mediaPlayer) {
                             next(playlist);
@@ -1025,15 +460,12 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
             else
             {
-                currentindex = 0;
+                currentIndex = 0;
                 Toast.makeText(MainActivity.this, "No previous song available",
                         Toast.LENGTH_SHORT).show();
             }
-
         }
-
     }
-
 
     @Override
     public void onStatusChanged(String s, int i, Bundle bundle) {}
@@ -1055,7 +487,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         else{
             dateTimeView.setText("No Last Current Time and Date are available");
         }
-
     }
 
     /**
@@ -1070,7 +501,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         else{
             locationView.setText("No Last Current location is available");
         }
-
     }
 
     /**
@@ -1179,7 +609,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
     }
 
-
     /**
      *
      * @param hour: the time of day
@@ -1210,7 +639,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         int hour = calendar.get(Calendar.HOUR_OF_DAY);
         currentUserDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
         currentUserMNEIndex = convertToMNEIndex(hour);
-
     }
 
     /**
@@ -1232,7 +660,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     public void run () {
                         setCurrentUserMNEAndDay();
                         score.score(currentUserlocation,currentUserDayOfWeek,currentUserMNEIndex);
-                        playList_flashback.sorter();
+                        playlist_FB.sorter();
+                        //playList_flashback.sorter();
                         playTracksOrder();
                     }
                 };
@@ -1243,31 +672,328 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }, timeDelay);
     }
 
-  /* public boolean storeSongs() {
-       SharedPreferences sharedPreferences = getSharedPreferences("lastState",MODE_PRIVATE);
-       SharedPreferences.Editor editor = sharedPreferences.edit();
-       Gson gson = new Gson();
-       String json = gson.toJson(songListObj);
-       editor.putString("tracks",json);
-       editor.apply();
-            //ByteArrayInputStream jis = new ByteArrayInputStream(tbyte2);
-            //ObjectInputStream dis = new ObjectInputStream(jis);
-            //ArrayList<Song> songs =(ArrayList<Song>)dis.readObject();
-       return true;
+    public void setListeners(){
+        musicLocator = new MusicLocator(locationManager, MainActivity.this);
+
+        //initialize location of user
+        currentUserlocation = musicLocator.getCurrentLocation();
+
+        //set up flashback switch listener
+        flashback = findViewById(R.id.switch1);
+        flashback.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isChecked == true) {
+                    //update flags
+                    flashOn = true;
+                    playingAlbumFlag = false;
+
+                    nextSong.setClickable(false);
+                    previousSong.setClickable(false);
+                    listView.setEnabled(false);
+                    playButton.setClickable(false);
+                    player.changeToPauseButton();
+
+                    Location location = currentUserlocation;
+                    int time = currentUserMNEIndex;
+
+                    Log.d("(flashback) time",Integer.toString(time));
+                    Log.d("flashback: ", "toggled flashback mode on");
+
+                    int day = currentUserDayOfWeek;
+
+                    //get score to list out song to be played
+                    score.score(location, day, time);
+
+                    //playList_flashback.sorter();
+                    playlist_FB.sorter();
+
+                    sortingList = playlist_FB.getSortingList();
+
+                    //play the song according to the score order
+                    playTracksOrder();
+
+                    Toast.makeText(MainActivity.this,
+                            "Flashback mode on", Toast.LENGTH_SHORT).show();
+                }
+                else {
+                    flashOn = false;
+
+                    nextSong.setClickable(true);
+                    previousSong.setClickable(true);
+                    playButton.setClickable(true);
+                    listView.setEnabled(true);
+
+                    player.getMediaPlayer().stop();
+
+                    player.changeToPlayButton();
+
+
+                    Toast.makeText(MainActivity.this,
+                            "Flashback mode off", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
+        //Play or Pause, Previous, Next button
+        player.changeToPlayButton();
+
+        adapter = new MyAdapter((ArrayList<String>) songTitleList, this, songListObj,
+                playlist_FB, this, flashOn, currentIndex, songList, currentUserMNEIndex,
+                currentUserDayOfWeek, currentUserlocation);
+
+        //handle listview and assign adapter
+        listView = findViewById(R.id.songList);
+        listView.setAdapter(adapter);
+
+
+        //set up listener for list of tracks list view
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+
+                Log.d("listView: ", "a song is clicked");
+
+                // Disable album queue
+                playingAlbumFlag = false;
+                currentIndex = i;
+
+                if (!flashOn) {
+                    Log.d("listView: ", "playing a song pressed by user");
+
+                    int resID = getResources().getIdentifier(songList.get(i), "raw", getPackageName());
+                    player.playMusicId(resID);
+
+                    //set the current playing song in the text view
+                    setNowPlayingView(songTitleList.get(i));
+                    showCurrentLocation(songListObj.get(i));
+                    showDateAndTime(songListObj.get(i));
+                    storeDateAndTime(songListObj.get(i));
+
+                    try {
+                        storeLocation(songListObj.get(i));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+
+
+                } else {
+
+                    Log.d("listView: ", "user pressed a track in flashback mode");
+                    //TODO: add pop up message where the user need to press ok
+                    Toast.makeText(MainActivity.this, "You are in flashback mode!\n" +
+                            "Please go to normal mode to select music", Toast.LENGTH_SHORT).show();
+                }
+
+
+            }
+        });
+
+        //set listener for next song button
+        nextSong.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (flashOn == false) {
+                    if(currentIndex == songList.size()-1){
+                        currentIndex = songList.size()-1;
+                        Toast lastSong = Toast.makeText(getApplicationContext(),
+                                "No next song available", Toast.LENGTH_SHORT);
+
+                        lastSong.show();
+                        return;
+                    }
+                    next(songList);
+                }
+            }
+        });
+
+        //set listener for previous song button
+        previousSong.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (flashOn == false) {
+
+                    if(playingAlbumFlag)
+                    {
+                        Toast.makeText(getApplicationContext(),
+                                "No previous song available." +
+                                        " You are playing an album", Toast.LENGTH_LONG).show();
+                    }
+                    else
+                    {
+                        if(currentIndex == 0){
+                            Toast firstSong = Toast.makeText(getApplicationContext(),
+                                    "No previous song available", Toast.LENGTH_LONG);
+                            firstSong.show();
+                            return;
+                        }
+                        previous(songList);
+                    }
+                }
+            }
+        });
+
+        //show list of albums
+        tempListAlbum = new ArrayList<>(albumList.values());
+        albumAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_expandable_list_item_1, tempListAlbum);
+        albumView.setAdapter(albumAdapter);
+
+
+        //set on item click listener for album list
+        albumView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                Log.d("album:", "album is clicked!");
+                // Enable album queue
+                playingAlbumFlag = true;
+
+                if (!flashOn) {
+                    Log.d("album:", "playing the whole album");
+
+                    player.releaseMusicPlayer();
+
+                    //get album to play
+                    albumToPlay = tempListAlbum.get(i);
+
+                    //prepare album to be played
+                    albumToPlay.setupAlbum();
+
+                    player.setAlbumToPlay(albumToPlay);
+                    player.setMusicLocator(musicLocator);
+
+                    ArrayList<Song> albumTracks = albumToPlay.getListOfTracks();
+                    for(int j = 0; j < albumTracks.size(); j++)
+                    {
+                        Log.d("album track list:", albumTracks.get(j).getTitle());
+                    }
+
+                    player.playAlbum();
+
+                }
+                else {
+                    Log.d("album:", "user pressed album in flashback mode");
+
+                    Toast.makeText(MainActivity.this, "You are in flashback mode!\n" +
+                            "Please go to normal mode to select music", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+        });
+
+        //set listener for the play button
+        playButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                player.playingAndPausing();
+            }
+        });
+
+        // Set listener for show current playlist_FB button
+        showCurrentPlaylist.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Log.d("show current list:", "clicked!");
+                CharSequence trackList[];
+                final AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+
+                //check if it is in vibe mode
+                if(flashOn){ //TODO: need to change to vibe boolean
+
+                    //get the neutral and favorited song
+                    ArrayList<String> listSong = new ArrayList<>();
+                    for(int i = 0; i < sortingList.size(); i++)
+                    {
+                        Song currSong = songListObj.get(
+                                indexTosong.get(playlist_FB.getSortingList().get(i)));
+                        if (currSong.getStatus() != -1) {
+                            String display = currSong.getTitle() + " - " + currSong.getArtist();
+                            listSong.add(display);
+                        }
+                    }
+
+                    //display the song that is going to be played
+                    trackList = new CharSequence[listSong.size()];
+                    for(int i = 0; i < listSong.size(); i++)
+                    {
+                        // Put song to playlist_FB if not disliked
+                        trackList[i] = listSong.get(i);
+                    }
+                    builder.setTitle("Vibe Mode Queue");
+
+                }
+                else if(playingAlbumFlag) {
+                    trackList = new CharSequence[albumToPlay.getListOfTracks().size()];
+                    ArrayList<Song> albumTracks = albumToPlay.getListOfTracks();
+                    for (int i = 0; i < albumTracks.size(); i++) {
+                        String display = albumTracks.get(i).getTitle() +
+                                " - " + albumTracks.get(i).getArtist();
+                        trackList[i] = display;
+                    }
+                    builder.setTitle(albumToPlay.getName());
+                }
+                else
+                {
+                    trackList = new CharSequence[]{ "Empty" };
+                    builder.setTitle("Normal Mode - No Track List Displayed");
+                }
+
+                builder.setItems(trackList, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+
+                    }
+                });
+                builder.show();
+
+            }
+        });
+
+        CharSequence sorts[] = new CharSequence[] {"Sort by Title", "Sort by Album", "Sort by Artist", "Sort by Status"};
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Pick a sorting method");
+        builder.setItems(sorts, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                if(which == 0){
+                    Sort sortTile = new SortTitle();
+                    sortTile.sortPlayList(songListObj,songTitleList,songList);
+                    adapter.list = (ArrayList<String>)songTitleList;
+                    adapter.notifyDataSetChanged();
+                }
+
+                else if(which == 1){
+                    Sort sortAlbum = new SortAlbum();
+                    sortAlbum.sortPlayList(songListObj, songTitleList,songList);
+                    adapter.list = (ArrayList<String>)songTitleList;
+                    adapter.notifyDataSetChanged();
+                }
+                else if(which ==2){
+                    Sort sortArtist = new SortArtist();
+                    sortArtist.sortPlayList(songListObj,songTitleList,songList);
+                    adapter.list = (ArrayList<String>)songTitleList;
+                    adapter.notifyDataSetChanged();
+                }
+                else{
+                    Sort sortStatus = new SortStatus();
+                    sortStatus.sortPlayList(songListObj,songTitleList,songList);
+                    adapter.list = (ArrayList<String>)songTitleList;
+                    adapter.notifyDataSetChanged();
+                }
+
+            }
+        });
+
+        sortButton = (Button)findViewById(R.id.sortButton);
+        sortButton.setOnClickListener(new View.OnClickListener(){
+
+            @Override
+            public void onClick(View view) {
+                if(!flashOn) {
+                    builder.show();
+                }
+            }
+        });
     }
-
-    public ArrayList<Song> getSongListObj(){
-        SharedPreferences sharedPreferences = getSharedPreferences("lastState",MODE_PRIVATE);
-        Gson gson = new Gson();
-        String json = sharedPreferences.getString("tracks","");
-        Type type = new TypeToken<List<Song>>(){}.getType();
-        ArrayList<Song> songs = gson.fromJson(json,type);
-        return songs;
-   }*/
-
 }
-
-
-
-
-

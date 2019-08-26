@@ -11,11 +11,11 @@ import java.util.List;
  * Created by lenovo on 2018/2/7.
  */
 
-public class Score {
+public class ScoreFlashback implements IScore {
     ArrayList<String> listSong;
     ArrayList<Song> songs;
-    public Score(){}
-    public Score(List<String> listSong, List<Song> songs) {   //add the tracks from the album to the score
+
+    public ScoreFlashback(List<String> listSong, List<Song> songs) {   //add the tracks from the album to the score
         this.listSong =new ArrayList<String>(listSong);
         this.songs = new ArrayList<>(songs);
         //Create score system
